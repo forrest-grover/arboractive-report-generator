@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,22 @@ from .classify import classify_all
 from .models import Report
 from .parse import find_contact, parse_pdf
 from .render import _format_report_date, render
+
+MAX_SAMPLES_PER_REPORT = 2
+
+# Fixed value for weasyprint's PDF CreationDate metadata. Any constant works;
+# the point is that repeated runs with the same input produce byte-identical
+# PDFs. weasyprint (and most reproducible-build tooling) honors this env var.
+_DETERMINISTIC_SOURCE_DATE_EPOCH = "0"
+
+
+def _write_pdf(html: str, out_path: Path) -> None:
+    """Render HTML to a deterministic PDF at out_path."""
+    os.environ["SOURCE_DATE_EPOCH"] = _DETERMINISTIC_SOURCE_DATE_EPOCH
+    # Lazy import so pure-HTML workflows don't pay weasyprint startup cost.
+    from weasyprint import HTML  # pylint: disable=import-outside-toplevel
+
+    HTML(string=html).write_pdf(target=str(out_path))
 
 
 def _derive_title(sample_names: tuple[str, ...]) -> tuple[str, str]:
@@ -71,7 +88,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     rp.add_argument("--title", default=None, help="Override report title")
     rp.add_argument(
-        "--out", default=None, metavar="OUTPUT.html", help="Output path (default stdout)"
+        "--out",
+        default=None,
+        metavar="OUTPUT",
+        help="Output path. Extension selects format: .pdf renders a PDF, "
+        "any other extension (or stdout, if omitted) writes HTML.",
     )
     return parser
 
@@ -81,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command != "report":
         parser.print_help()
+        return 1
+
+    if len(args.samples) > MAX_SAMPLES_PER_REPORT:
+        print(
+            f"error: at most {MAX_SAMPLES_PER_REPORT} samples per report "
+            f"(got {len(args.samples)})",
+            file=sys.stderr,
+        )
         return 1
 
     pdf_path = Path(args.input_pdf)
@@ -135,7 +164,11 @@ def main(argv: list[str] | None = None) -> int:
 
     html = render(report)
     if args.out:
-        Path(args.out).write_text(html, encoding="utf-8")
+        out_path = Path(args.out)
+        if out_path.suffix.lower() == ".pdf":
+            _write_pdf(html, out_path)
+        else:
+            out_path.write_text(html, encoding="utf-8")
     else:
         sys.stdout.write(html)
     return 0

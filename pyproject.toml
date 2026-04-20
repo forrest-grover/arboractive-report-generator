@@ -9,6 +9,7 @@ description = "Deterministic UConn soil lab PDF → ArborActive branded HTML rep
 requires-python = ">=3.11"
 dependencies = [
     "pdfplumber>=0.10",
+    "weasyprint>=60",
 ]
 
 [project.scripts]
@@ -46,7 +47,7 @@ warn_unreachable = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["pdfplumber", "pdfplumber.*"]
+module = ["pdfplumber", "pdfplumber.*", "weasyprint", "weasyprint.*"]
 ignore_missing_imports = true
 
 [tool.pylint.main]

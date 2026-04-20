@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from arboractive.classify import classify_all
 from arboractive.models import Report, Sample
 from arboractive.render import render
@@ -56,3 +58,46 @@ def test_render_byte_identical() -> None:
     assert len(a) > 2000
     assert "<!doctype html>" in a
     assert "Demo Soil Report" in a
+
+
+def test_pdf_byte_identical(tmp_path: Path) -> None:
+    from arboractive.cli import _write_pdf  # pylint: disable=import-outside-toplevel
+
+    html = render(_make_report())
+    out_a = tmp_path / "a.pdf"
+    out_b = tmp_path / "b.pdf"
+    _write_pdf(html, out_a)
+    _write_pdf(html, out_b)
+    assert out_a.read_bytes() == out_b.read_bytes(), "PDF output is non-deterministic"
+    assert out_a.read_bytes().startswith(b"%PDF-")
+
+
+def test_render_rejects_more_than_two_samples() -> None:
+    import pytest  # pylint: disable=import-outside-toplevel
+
+    sample = Sample(
+        name="x",
+        lab_number="1",
+        received="1/1/2026",
+        reported="1/1/2026",
+        ph=6.5,
+        calcium_lbs_acre=2000,
+        magnesium_lbs_acre=200,
+        potassium_lbs_acre=300,
+        phosphorus_lbs_acre=17,
+        organic_matter_pct=6.0,
+        cec_meq_100g=12.0,
+    )
+    three = classify_all((sample, sample, sample))
+    report = Report(
+        title="x",
+        site_name="x",
+        report_date="x",
+        samples=three,
+        contact_name="",
+        contact_address="",
+        contact_email="",
+        contact_phone="",
+    )
+    with pytest.raises(ValueError, match="at most 2 samples"):
+        render(report)

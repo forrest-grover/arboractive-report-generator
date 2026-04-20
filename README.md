@@ -26,7 +26,8 @@ Same input always yields byte-identical HTML output.
 ## Requirements
 
 - Python 3.11+
-- `pdfplumber`
+- `pdfplumber` (PDF text extraction)
+- `weasyprint` (optional PDF output)
 
 ## Install
 
@@ -41,10 +42,15 @@ python -m arboractive report INPUT.pdf \
     --sample "SampleNameA" \
     --sample "SampleNameB" \
     [--title "Custom Report Title"] \
-    [--out output.html]
+    [--out output.html|output.pdf]
 ```
 
-Omit `--out` to write HTML to stdout (pipe-friendly).
+The output format is inferred from the `--out` extension: `.pdf` renders a
+PDF (via `weasyprint`), anything else writes HTML. Omit `--out` to write HTML
+to stdout (pipe-friendly).
+
+At most **2 samples per report**. The layout is designed for side-by-side
+comparison; extra samples are rejected at the CLI with exit code 1.
 
 Sample names are matched case-insensitively against the sample headers in the
 PDF but stored verbatim for display. When two or more samples share a leading

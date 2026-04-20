@@ -170,19 +170,34 @@ h1.report-title {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.bar-wrap { width: 100%; }
-.bar-svg {
-  display: block;
+.bar-wrap {
+  position: relative;
   width: 100%;
   height: 46px;
-  overflow: visible;
+}
+.bar-svg {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 100%;
+  height: 26px;
+  display: block;
 }
 .zone-bad { fill: var(--zone-bad); }
 .zone-warn { fill: var(--zone-warn); }
 .zone-good { fill: var(--zone-good); }
-.zone-divider { stroke: rgba(42,42,42,0.25); stroke-width: 1; }
-.bar-marker-line { stroke: var(--ink); stroke-width: 2.4; vector-effect: non-scaling-stroke; }
-.bar-marker-line-outer { stroke: #fff; stroke-width: 5; vector-effect: non-scaling-stroke; }
+.zone-divider { stroke: rgba(42,42,42,0.25); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.bar-marker {
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 46px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.bar-marker-svg { display: block; width: 14px; height: 46px; }
+.bar-marker-line { stroke: var(--ink); stroke-width: 2.4; }
+.bar-marker-line-outer { stroke: #fff; stroke-width: 5; }
 .bar-marker-tri { fill: var(--ink); stroke: #fff; stroke-width: 1.2; stroke-linejoin: round; }
 .icon {
   width: 22px;
@@ -239,42 +254,42 @@ def _logo_img(variant: str = "green", alt: str = "ArborActive") -> str:
 
 
 def _threshold_bar(spec: ThresholdSpec, tv: TieredValue) -> str:
-    """Balanced bar: 5 equal-width zones (20% each) so GOOD is always centered
-    and the scale is visually aligned across every row.
+    """Balanced bar: 5 equal-width zones (20% each) + a fixed-size marker
+    overlay. Zones stretch to fill the cell width; the marker does not.
 
-    The marker is tier-relative: where the raw value falls within its tier's
-    numeric range positions the marker within that tier's fixed 20% zone.
-
-    SVG viewBox: 100 x 46.
-      y  0..10 : triangle marker pointing down
-      y 12..38 : colored zone rectangles (26 tall)
-      y  3..42 : marker line
+    Zones SVG: viewBox 100x26, `preserveAspectRatio="none"` (stretches).
+    Marker overlay: 14x46 SVG, positioned absolutely at the value percent,
+    centered on its x-coord via `transform: translateX(-50%)` so the marker
+    keeps the same visual size regardless of how wide the cell becomes.
     """
     zone_ranges = zone_numeric_ranges(spec)
     zone_idx = tier_to_zone_index(spec, tv.tier)
     zmin, zmax = zone_ranges[zone_idx]
     zspan = zmax - zmin or 1.0
     within = max(0.0, min(1.0, (tv.raw - zmin) / zspan))
-    mx = round(zone_idx * 20 + within * 20, 2)
+    mx_pct = round(zone_idx * 20 + within * 20, 2)
 
     parts: list[str] = [
-        '<div class="bar-wrap">'
-        '<svg class="bar-svg" viewBox="0 0 100 46" '
-        'preserveAspectRatio="none" '
-        'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+        '<div class="bar-wrap">',
+        '<svg class="bar-svg" viewBox="0 0 100 26" preserveAspectRatio="none" '
+        'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
     ]
     for i, cls in enumerate(ZONE_CLASSES):
-        parts.append(f'<rect class="{cls}" x="{i * 20}" y="12" width="20" height="26"/>')
+        parts.append(f'<rect class="{cls}" x="{i * 20}" y="0" width="20" height="26"/>')
     for i in range(1, 5):
         x = i * 20
-        parts.append(f'<line class="zone-divider" x1="{x}" y1="12" x2="{x}" y2="38"/>')
+        parts.append(f'<line class="zone-divider" x1="{x}" y1="0" x2="{x}" y2="26"/>')
+    parts.append("</svg>")
+    # Fixed-pixel-size marker overlay so the triangle/line stay crisp at any cell width.
     parts.append(
-        f'<line class="bar-marker-line-outer" x1="{mx}" y1="3" x2="{mx}" y2="42"/>'
-        f'<line class="bar-marker-line" x1="{mx}" y1="3" x2="{mx}" y2="42"/>'
-        f'<polygon class="bar-marker-tri" '
-        f'points="{round(mx - 4, 2)},0 {round(mx + 4, 2)},0 {mx},10"/>'
+        f'<div class="bar-marker" style="left: {mx_pct}%;">'
+        '<svg class="bar-marker-svg" viewBox="0 0 14 46" '
+        'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+        '<line class="bar-marker-line-outer" x1="7" y1="3" x2="7" y2="43"/>'
+        '<line class="bar-marker-line" x1="7" y1="3" x2="7" y2="43"/>'
+        '<polygon class="bar-marker-tri" points="2,0 12,0 7,10"/>'
+        "</svg></div></div>"
     )
-    parts.append("</svg></div>")
     return "".join(parts)
 
 
@@ -336,6 +351,10 @@ def _render_footer(report: Report) -> str:
 
 def render(report: Report) -> str:
     """Render report to a single self-contained HTML string."""
+    if len(report.samples) > 2:
+        raise ValueError(
+            f"render() supports at most 2 samples per report, got {len(report.samples)}"
+        )
     parts = [
         "<!doctype html>\n",
         '<html lang="en">\n',
