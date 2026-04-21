@@ -47,38 +47,6 @@ TIER_ICON: dict[Tier, tuple[str, tuple[str, str]]] = {
 }
 
 
-MONTHS = (
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-)
-
-
-def format_report_date(reported: str) -> str:
-    """Convert '4/16/2026' to 'April 16, 2026'. Pure string math, no datetime."""
-    parts = reported.split("/")
-    if len(parts) != 3:
-        return reported
-    month_str, day, year = parts
-    try:
-        month_idx = int(month_str) - 1
-        day_num = int(day)
-        if 0 <= month_idx < 12:
-            return f"{MONTHS[month_idx]} {day_num}, {year}"
-    except ValueError:
-        pass
-    return reported
-
-
 CSS = """
 @page {
   /* Zero margin so the paper background fills the full printed/PDF page.

@@ -38,7 +38,6 @@ def make_report(samples: tuple[Sample, ...], **overrides: object) -> Report:
         "site_name": "Demo",
         "report_date": "January 2026",
         "samples": classify_all(samples),
-        "contact_name": "",
         "contact_address": "",
         "contact_email": "",
         "contact_phone": "",

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pdfplumber
 
-from arboractive.cli import write_pdf
+from arboractive.pipeline import write_pdf
 from arboractive.render import render
 
 from ._fixtures import DEMO_SAMPLE_A, DEMO_SAMPLE_B, make_report

@@ -49,7 +49,6 @@ class Report:
     site_name: str
     report_date: str
     samples: tuple[ClassifiedSample, ...]
-    contact_name: str
     contact_address: str
     contact_email: str
     contact_phone: str

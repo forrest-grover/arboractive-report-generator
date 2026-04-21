@@ -65,8 +65,11 @@ disable = [
     "too-many-locals",                   # natural for the CLI main entry point
     "too-many-branches",                 # natural for the CLI main entry point
     "too-many-instance-attributes",      # natural for data-record dataclasses
-    "cyclic-import",                     # cli/gui cross-import via lazy imports
 ]
 
 [tool.pylint.format]
 max-line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

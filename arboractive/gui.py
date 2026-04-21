@@ -12,10 +12,10 @@ import traceback
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from .classify import classify_all
 from .models import Report, Sample
-from .parse import find_contact, parse_pdf
-from .render import format_report_date, render
+from .parse import parse_pdf
+from .pipeline import build_report, write_pdf
+from .render import render
 
 
 class SoilReportApp:
@@ -31,6 +31,9 @@ class SoilReportApp:
         self.samples: tuple[Sample, ...] = ()
         self.checkbox_vars: dict[str, tk.BooleanVar] = {}
         self.checkboxes: dict[str, ttk.Checkbutton] = {}
+        # Set by _build_report each save so handlers can append a warning to
+        # the success status without re-running the build.
+        self._contact_parse_failed: bool = False
 
         self._build_ui()
 
@@ -149,40 +152,17 @@ class SoilReportApp:
         return tuple(s for s in self.samples if s.name in names)
 
     def _build_report(self) -> Report | None:
-        # Local import to avoid a circular dep at module load time.
-        from .cli import derive_title  # pylint: disable=import-outside-toplevel
-
         selected = self._selected_samples()
         if not selected:
             messagebox.showwarning("Nothing selected", "Select at least one sample first.")
             return None
-
-        classified = classify_all(selected)
-        title, site_name = derive_title(tuple(s.name for s in selected))
-        override = self.title_var.get().strip()
-        if override:
-            title = override
-            site_name = override.replace(" Soil Report", "").strip() or site_name
-        report_date = format_report_date(selected[0].reported)
-
-        if self.pdf_path is None:
-            contact = ("", "", "", "")
-        else:
-            try:
-                contact = find_contact(self.pdf_path)
-            except Exception:  # pylint: disable=broad-exception-caught
-                contact = ("", "", "", "")
-
-        return Report(
-            title=title,
-            site_name=site_name,
-            report_date=report_date,
-            samples=classified,
-            contact_name=contact[0],
-            contact_address=contact[1],
-            contact_email=contact[2],
-            contact_phone=contact[3],
-        )
+        result = build_report(selected, self.pdf_path, self.title_var.get())
+        self._contact_parse_failed = result.contact_parse_failed
+        if result.contact_parse_failed:
+            self._set_status(
+                "Warning: contact block could not be parsed; contact fields left empty."
+            )
+        return result.report
 
     def _save_dialog(self, report: Report, extension: str, label: str) -> Path | None:
         default_name = f"{report.site_name.replace(' ', '_') or 'soil'}_report{extension}"
@@ -206,13 +186,10 @@ class SoilReportApp:
         except Exception as e:  # pylint: disable=broad-exception-caught
             messagebox.showerror("Save failed", f"{e}\n\n{traceback.format_exc()}")
             return
-        self._set_status(f"Saved {out.name}")
+        self._set_status(self._with_contact_warning(f"Saved {out.name}"))
         messagebox.showinfo("Saved", f"HTML report saved:\n{out}")
 
     def _on_save_pdf(self) -> None:
-        # Local import so HTML-only flows don't pay weasyprint startup cost.
-        from .cli import write_pdf  # pylint: disable=import-outside-toplevel
-
         report = self._build_report()
         if report is None:
             return
@@ -226,11 +203,18 @@ class SoilReportApp:
         except Exception as e:  # pylint: disable=broad-exception-caught
             messagebox.showerror("Save failed", f"{e}\n\n{traceback.format_exc()}")
             return
-        self._set_status(f"Saved {out.name}")
+        self._set_status(self._with_contact_warning(f"Saved {out.name}"))
         messagebox.showinfo("Saved", f"PDF report saved:\n{out}")
 
     def _set_status(self, msg: str) -> None:
         self.status_var.set(msg)
+
+    def _with_contact_warning(self, msg: str) -> str:
+        if self._contact_parse_failed:
+            return (
+                f"{msg} (warning: contact block could not be parsed; " "contact fields left empty.)"
+            )
+        return msg
 
 
 def run_gui() -> None:

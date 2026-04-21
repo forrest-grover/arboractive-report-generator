@@ -3,63 +3,14 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-from itertools import takewhile
 from pathlib import Path
 
-from .classify import classify_all
-from .models import Report
-from .parse import find_contact, parse_pdf
-from .render import format_report_date, render
+from .parse import parse_pdf
+from .pipeline import build_report, write_pdf
+from .render import render
 
 MAX_SAMPLES_PER_REPORT = 2
-
-# Fixed value for weasyprint's PDF CreationDate metadata. Any constant works;
-# the point is that repeated runs with the same input produce byte-identical
-# PDFs. weasyprint (and most reproducible-build tooling) honors this env var.
-_DETERMINISTIC_SOURCE_DATE_EPOCH = "0"
-
-
-def write_pdf(html: str, out_path: Path) -> None:
-    """Render HTML to a deterministic PDF at out_path."""
-    os.environ["SOURCE_DATE_EPOCH"] = _DETERMINISTIC_SOURCE_DATE_EPOCH
-    # Lazy import so pure-HTML workflows don't pay weasyprint startup cost.
-    from weasyprint import HTML  # pylint: disable=import-outside-toplevel
-
-    HTML(string=html).write_pdf(target=str(out_path))
-
-
-def derive_title(sample_names: tuple[str, ...]) -> tuple[str, str]:
-    """Return (title, site_name) given the sample names.
-
-    Site name is the longest alphabetic prefix shared across all sample names,
-    stopping at the first non-alpha character in any name. Falls back to
-    'Soil Report' / 'Samples' when there's no shared prefix.
-    """
-    if not sample_names:
-        return "Soil Report", "Samples"
-    common = _common_prefix([_alpha_prefix(n) for n in sample_names])
-    if common:
-        return f"{common} Soil Report", common
-    # Single sample without a non-alpha suffix → _alpha_prefix returns the
-    # full name and _common_prefix returns it too, handled by the branch above.
-    # Here we only reach this for multiple samples with no shared prefix.
-    return "Soil Report", "Samples"
-
-
-def _alpha_prefix(s: str) -> str:
-    return "".join(takewhile(str.isalpha, s))
-
-
-def _common_prefix(strings: list[str]) -> str:
-    if not strings:
-        return ""
-    shortest = min(strings, key=len)
-    for i, ch in enumerate(shortest):
-        if any(s[i] != ch for s in strings):
-            return shortest[:i]
-    return shortest
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -117,7 +68,6 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         all_samples = parse_pdf(pdf_path)
-        contact_name, address, email, phone = find_contact(pdf_path)
     except Exception as e:  # pylint: disable=broad-exception-caught
         # Surface any parse/IO failure as a clean CLI error code.
         print(f"error: PDF parse failure: {e}", file=sys.stderr)
@@ -140,27 +90,14 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         selected.append(match)
 
-    classified = classify_all(tuple(selected))
+    result = build_report(tuple(selected), pdf_path, args.title)
+    if result.contact_parse_failed:
+        print(
+            "Warning: contact block could not be parsed; contact fields left empty.",
+            file=sys.stderr,
+        )
 
-    title, site_name = derive_title(tuple(s.name for s in selected))
-    if args.title:
-        title = args.title
-        site_name = args.title.replace(" Soil Report", "").strip() or site_name
-
-    report_date = format_report_date(selected[0].reported)
-
-    report = Report(
-        title=title,
-        site_name=site_name,
-        report_date=report_date,
-        samples=classified,
-        contact_name=contact_name,
-        contact_address=address,
-        contact_email=email,
-        contact_phone=phone,
-    )
-
-    html = render(report)
+    html = render(result.report)
     if args.out:
         out_path = Path(args.out)
         if out_path.suffix.lower() == ".pdf":

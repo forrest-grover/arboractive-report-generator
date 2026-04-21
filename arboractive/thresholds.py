@@ -14,6 +14,7 @@ Sources:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from .models import Tier
 
@@ -25,8 +26,8 @@ class ThresholdSpec:
     unit: str  # "lbs/acre", "%", "meq/100g", ""
     breakpoints: tuple[float, float, float, float]
     display_range: tuple[float, float]
-    direction: str  # "normal" | "inverted"
-    fmt: str  # "int" | "decimal"
+    direction: Literal["normal", "inverted"]
+    fmt: Literal["int", "decimal"]
 
 
 SPECS: tuple[ThresholdSpec, ...] = (
@@ -111,7 +112,7 @@ def tier_for(spec: ThresholdSpec, v: float) -> Tier:
     return Tier.VERY_HIGH
 
 
-def zone_boundaries_asc(spec: ThresholdSpec) -> tuple[float, float, float, float]:
+def _zone_boundaries_asc(spec: ThresholdSpec) -> tuple[float, float, float, float]:
     if spec.direction == "normal":
         return spec.breakpoints
     b = spec.breakpoints
@@ -120,7 +121,7 @@ def zone_boundaries_asc(spec: ThresholdSpec) -> tuple[float, float, float, float
 
 def zone_numeric_ranges(spec: ThresholdSpec) -> tuple[tuple[float, float], ...]:
     dmin, dmax = spec.display_range
-    asc = zone_boundaries_asc(spec)
+    asc = _zone_boundaries_asc(spec)
     return (
         (dmin, asc[0]),
         (asc[0], asc[1]),
