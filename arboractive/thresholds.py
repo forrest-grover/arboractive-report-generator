@@ -69,6 +69,24 @@ SPECS: tuple[ThresholdSpec, ...] = (
 
 SPEC_BY_LABEL: dict[str, ThresholdSpec] = {s.label: s for s in SPECS}
 
+# Tier → visual zone index (0 = leftmost). Precomputed per direction so callers
+# don't rebuild the dict on every lookup. For `inverted` nutrients the mapping
+# is the reverse (highest numeric values sit in the leftmost zone).
+_TIER_ZONE_NORMAL: dict[Tier, int] = {
+    Tier.VERY_LOW: 0,
+    Tier.LOW: 1,
+    Tier.GOOD: 2,
+    Tier.HIGH: 3,
+    Tier.VERY_HIGH: 4,
+}
+_TIER_ZONE_INVERTED: dict[Tier, int] = {
+    Tier.VERY_HIGH: 0,
+    Tier.HIGH: 1,
+    Tier.GOOD: 2,
+    Tier.LOW: 3,
+    Tier.VERY_LOW: 4,
+}
+
 
 def tier_for(spec: ThresholdSpec, v: float) -> Tier:
     bp = spec.breakpoints
@@ -113,21 +131,8 @@ def zone_numeric_ranges(spec: ThresholdSpec) -> tuple[tuple[float, float], ...]:
 
 
 def tier_to_zone_index(spec: ThresholdSpec, tier: Tier) -> int:
-    if spec.direction == "normal":
-        return {
-            Tier.VERY_LOW: 0,
-            Tier.LOW: 1,
-            Tier.GOOD: 2,
-            Tier.HIGH: 3,
-            Tier.VERY_HIGH: 4,
-        }[tier]
-    return {
-        Tier.VERY_HIGH: 0,
-        Tier.HIGH: 1,
-        Tier.GOOD: 2,
-        Tier.LOW: 3,
-        Tier.VERY_LOW: 4,
-    }[tier]
+    mapping = _TIER_ZONE_NORMAL if spec.direction == "normal" else _TIER_ZONE_INVERTED
+    return mapping[tier]
 
 
 def format_value(spec: ThresholdSpec, v: float) -> str:

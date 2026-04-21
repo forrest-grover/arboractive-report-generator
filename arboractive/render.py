@@ -26,20 +26,28 @@ def _logo_data_uri(name: str) -> str:
 
 # Five zones always render red-amber-green-amber-red left-to-right on the
 # numeric axis, regardless of nutrient direction (symmetric 3-color scale).
-ZONE_CLASSES = ("zone-bad", "zone-warn", "zone-good", "zone-warn", "zone-bad")
+# Colors applied as SVG `fill` attributes so weasyprint renders them (its SVG
+# engine doesn't apply external CSS class selectors to nested SVG elements).
+ZONE_FILLS = ("#d36156", "#eeac58", "#9bbd7a", "#eeac58", "#d36156")
+INK = "#2a2a2a"
 
-# Icon char + css class — symmetric 3-color scheme:
-# extremes (VERY_LOW/VERY_HIGH) are bad, mids (LOW/HIGH) are warn, GOOD is good.
-TIER_ICON = {
-    Tier.VERY_LOW: ("!", "icon-bad"),
-    Tier.LOW: ("\u2022", "icon-warn"),
-    Tier.GOOD: ("\u2713", "icon-good"),
-    Tier.HIGH: ("\u2022", "icon-warn"),
-    Tier.VERY_HIGH: ("!", "icon-bad"),
+# Icon glyph + (background color, text color) per tier. Rendered as SVG so
+# weasyprint draws true circles (HTML `border-radius` on a span produced ovals
+# under weasyprint's layout). Symmetric 3-color scheme: extremes (VERY_LOW /
+# VERY_HIGH) are red, mids (LOW / HIGH) amber, GOOD green.
+_ICON_RED = ("#b33a2f", "#ffffff")
+_ICON_AMBER = ("#e89020", "#333333")
+_ICON_GREEN = ("#7aa451", "#ffffff")
+TIER_ICON: dict[Tier, tuple[str, tuple[str, str]]] = {
+    Tier.VERY_LOW: ("!", _ICON_RED),
+    Tier.LOW: ("\u2022", _ICON_AMBER),
+    Tier.GOOD: ("\u2713", _ICON_GREEN),
+    Tier.HIGH: ("\u2022", _ICON_AMBER),
+    Tier.VERY_HIGH: ("!", _ICON_RED),
 }
 
 
-MONTHS = [
+MONTHS = (
     "January",
     "February",
     "March",
@@ -52,38 +60,35 @@ MONTHS = [
     "October",
     "November",
     "December",
-]
+)
 
 
-def _format_report_date(reported: str) -> str:
-    """Convert '4/16/2026' to 'April 2026'. Pure string math, no datetime."""
+def format_report_date(reported: str) -> str:
+    """Convert '4/16/2026' to 'April 16, 2026'. Pure string math, no datetime."""
     parts = reported.split("/")
     if len(parts) != 3:
         return reported
-    month_str, _day, year = parts
+    month_str, day, year = parts
     try:
         month_idx = int(month_str) - 1
+        day_num = int(day)
         if 0 <= month_idx < 12:
-            return f"{MONTHS[month_idx]} {year}"
+            return f"{MONTHS[month_idx]} {day_num}, {year}"
     except ValueError:
         pass
     return reported
 
 
 CSS = """
+@page {
+  /* Zero margin so the paper background fills the full printed/PDF page.
+     Without this, weasyprint renders a white frame around the content. */
+  margin: 0;
+}
 :root {
-  /* Symmetric 3-color scale: extremes are bad (red), mids are caution (amber),
-     GOOD is optimal (green). */
-  /* Full-saturation accent colors — used for the tier indicator dots. */
-  --tier-bad: #b33a2f;
-  --tier-warn: #e89020;
-  --tier-good: #7aa451;
-  /* Bar zone fills — same hues at full saturation, lightened 25% toward
-     white. Keeps the scale distinct from the paper background while staying
-     quieter than the vivid indicator dots. */
-  --zone-bad: #d36156;
-  --zone-warn: #eeac58;
-  --zone-good: #9bbd7a;
+  /* CSS custom properties are only used for HTML-level styling (backgrounds,
+     borders, text). SVG fills/strokes are inlined in the markup because
+     weasyprint's SVG engine ignores external CSS for nested SVG elements. */
   --brand-green: #2d4a2b;
   --brand-green-dark: #1e3320;
   --paper: #e3d9bf;
@@ -102,11 +107,51 @@ html, body {
   font-size: 14px;
   line-height: 1.4;
 }
-.page {
-  max-width: 820px;
-  margin: 0 auto;
-  background: var(--paper);
-  padding: 32px 40px 0 40px;
+/* Sticky-footer: different techniques per medium so each renders correctly.
+   - Screen (browsers): flex column. body fills viewport, .page flex-grows
+     to push the footer-block to the bottom naturally. Footer stays below
+     content without overlap regardless of window size.
+   - Print (weasyprint): absolute positioning of footer-block at body bottom.
+     weasyprint's flex support doesn't reliably honor `flex: 1` for a true
+     sticky-footer, but absolute positioning with body = 100% works. */
+html, body { height: 100%; }
+
+@media screen {
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .page {
+    flex: 1 0 auto;
+    width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
+    background: var(--paper);
+    /* Extra bottom padding becomes visible gap between the table and the
+       footer banner, since .page sits directly above the banner in flow. */
+    padding: 32px 40px 120px 40px;
+    box-sizing: border-box;
+  }
+  .footer-block {
+    flex-shrink: 0;
+  }
+}
+
+@media print {
+  body { position: relative; }
+  .page {
+    max-width: 820px;
+    margin: 0 auto;
+    background: var(--paper);
+    padding: 32px 40px 200px 40px;
+  }
+  .footer-block {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
 }
 .brand-header {
   text-align: center;
@@ -132,7 +177,7 @@ h1.report-title {
   display: grid;
   gap: 0;
   border-top: 1px solid var(--rule);
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 .comparison .col-header {
   font-family: Georgia, serif;
@@ -183,10 +228,10 @@ h1.report-title {
   height: 26px;
   display: block;
 }
-.zone-bad { fill: var(--zone-bad); }
-.zone-warn { fill: var(--zone-warn); }
-.zone-good { fill: var(--zone-good); }
-.zone-divider { stroke: rgba(42,42,42,0.25); stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* Bar fills/strokes are applied as SVG presentation attributes (see
+   _threshold_bar) because weasyprint's SVG renderer ignores class-based CSS
+   inside SVG. The CSS above on .bar-svg/.bar-wrap still applies to layout
+   (position, size) since those are HTML-level properties. */
 .bar-marker {
   position: absolute;
   top: 0;
@@ -196,27 +241,15 @@ h1.report-title {
   pointer-events: none;
 }
 .bar-marker-svg { display: block; width: 14px; height: 46px; }
-.bar-marker-line { stroke: var(--ink); stroke-width: 2.4; }
-.bar-marker-line-outer { stroke: #fff; stroke-width: 5; }
-.bar-marker-tri { fill: var(--ink); stroke: #fff; stroke-width: 1.2; stroke-linejoin: round; }
-.icon {
+/* Icon circles are drawn as inline SVG (see _icon) so they stay truly round
+   under weasyprint, which stretches HTML spans with border-radius into ovals. */
+.icon-svg {
+  display: inline-block;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 700;
-  font-size: 13px;
-  font-family: Arial, sans-serif;
+  vertical-align: middle;
 }
-.icon.icon-bad { background: var(--tier-bad); }
-.icon.icon-warn { background: var(--tier-warn); color: #333; }
-.icon.icon-good { background: var(--tier-good); }
 .footer {
-  margin: 0 -40px;
-  margin-top: 12px;
   background: var(--brand-green);
   color: var(--paper);
   padding: 22px 40px 18px 40px;
@@ -237,7 +270,6 @@ h1.report-title {
   color: var(--paper-dark);
   font-size: 11px;
   padding: 8px 40px;
-  margin: 0 -40px;
   text-align: center;
 }
 """
@@ -257,10 +289,11 @@ def _threshold_bar(spec: ThresholdSpec, tv: TieredValue) -> str:
     """Balanced bar: 5 equal-width zones (20% each) + a fixed-size marker
     overlay. Zones stretch to fill the cell width; the marker does not.
 
-    Zones SVG: viewBox 100x26, `preserveAspectRatio="none"` (stretches).
-    Marker overlay: 14x46 SVG, positioned absolutely at the value percent,
-    centered on its x-coord via `transform: translateX(-50%)` so the marker
-    keeps the same visual size regardless of how wide the cell becomes.
+    Zones SVG: viewBox 100x26, `preserveAspectRatio="none"` (stretches). Zones
+    touch directly — color contrast carries the boundaries, no divider line.
+    Marker overlay: 14x46 pill-shaped stripe with rounded caps, positioned
+    absolutely at the value percent and centered via translateX(-50%). Stays
+    the same visual size regardless of how wide the cell becomes.
     """
     zone_ranges = zone_numeric_ranges(spec)
     zone_idx = tier_to_zone_index(spec, tv.tier)
@@ -274,38 +307,51 @@ def _threshold_bar(spec: ThresholdSpec, tv: TieredValue) -> str:
         '<svg class="bar-svg" viewBox="0 0 100 26" preserveAspectRatio="none" '
         'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">',
     ]
-    for i, cls in enumerate(ZONE_CLASSES):
-        parts.append(f'<rect class="{cls}" x="{i * 20}" y="0" width="20" height="26"/>')
-    for i in range(1, 5):
-        x = i * 20
-        parts.append(f'<line class="zone-divider" x1="{x}" y1="0" x2="{x}" y2="26"/>')
+    # Adjacent zones touch directly — alternating red/amber/green contrast
+    # carries the boundaries; no divider needed.
+    for i, fill in enumerate(ZONE_FILLS):
+        parts.append(f'<rect fill="{fill}" x="{i * 20}" y="0" width="20" height="26"/>')
     parts.append("</svg>")
-    # Fixed-pixel-size marker overlay so the triangle/line stay crisp at any cell width.
+    # Fixed-pixel-size marker overlay: a pill-shaped vertical stripe.
+    # Rounded caps + no triangle means no stray flat edges on the top or bottom.
     parts.append(
         f'<div class="bar-marker" style="left: {mx_pct}%;">'
         '<svg class="bar-marker-svg" viewBox="0 0 14 46" '
         'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-        '<line class="bar-marker-line-outer" x1="7" y1="3" x2="7" y2="43"/>'
-        '<line class="bar-marker-line" x1="7" y1="3" x2="7" y2="43"/>'
-        '<polygon class="bar-marker-tri" points="2,0 12,0 7,10"/>'
+        '<line x1="7" y1="4" x2="7" y2="42" stroke="#ffffff" stroke-width="6" '
+        'stroke-linecap="round"/>'
+        f'<line x1="7" y1="4" x2="7" y2="42" stroke="{INK}" stroke-width="3" '
+        'stroke-linecap="round"/>'
         "</svg></div></div>"
     )
     return "".join(parts)
 
 
 def _icon(tier: Tier) -> str:
-    char, cls = TIER_ICON[tier]
-    return f'<span class="icon {cls}">{escape(char)}</span>'
+    char, (bg, fg) = TIER_ICON[tier]
+    # y=15 puts Arial-13 baselines roughly centered in a 22x22 circle for
+    # "!", "•", and "✓". text-anchor="middle" handles horizontal centering.
+    return (
+        '<svg class="icon-svg" viewBox="0 0 22 22" '
+        'xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+        f'<circle cx="11" cy="11" r="11" fill="{bg}"/>'
+        f'<text x="11" y="15.5" text-anchor="middle" fill="{fg}" '
+        'font-family="Arial, Helvetica, sans-serif" font-size="13" '
+        f'font-weight="700">{escape(char)}</text>'
+        "</svg>"
+    )
 
 
 def _render_comparison(samples: tuple[ClassifiedSample, ...]) -> str:
     n = len(samples)
     col_template = f"180px repeat({n}, 1fr)"
-    # Build header row
     out = [f'<section class="comparison" style="grid-template-columns: {col_template};">']
-    out.append('<div class="col-header label-col"></div>')
-    for cs in samples:
-        out.append(f'<div class="col-header">{escape(cs.sample.name)}</div>')
+    # Column headers only when comparing — with a single sample the sample name is
+    # already in the page title, so an extra header row is noise.
+    if n > 1:
+        out.append('<div class="col-header label-col"></div>')
+        for cs in samples:
+            out.append(f'<div class="col-header">{escape(cs.sample.name)}</div>')
     # Data rows — use nutrient order from first sample (all samples share order)
     labels = [lbl for lbl, _ in samples[0].nutrients]
     for i, label in enumerate(labels):
@@ -332,6 +378,7 @@ def _render_header() -> str:
 
 def _render_footer(report: Report) -> str:
     return (
+        '<div class="footer-block">'
         '<footer class="footer">'
         f"{_logo_img(variant='white')}"
         '<div class="contact">'
@@ -342,9 +389,7 @@ def _render_footer(report: Report) -> str:
         f"{escape(report.contact_phone)}"
         "</div>"
         "</footer>"
-        '<div class="sub-footer">'
-        f"Source&colon; Lab Report for &lsquo;{escape(report.site_name)}&rsquo; Samples, "
-        f"{escape(report.report_date)}"
+        f'<div class="sub-footer">Lab report generated {escape(report.report_date)}</div>'
         "</div>"
     )
 
@@ -370,8 +415,8 @@ def render(report: Report) -> str:
         _render_header(),
         f'<h1 class="report-title">{escape(report.title)}</h1>',
         _render_comparison(report.samples),
-        _render_footer(report),
         "</div>\n",
+        _render_footer(report),
         "</body>\n",
         "</html>\n",
     ]

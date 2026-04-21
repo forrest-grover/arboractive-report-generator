@@ -37,6 +37,22 @@ pip install -e .
 
 ## Usage
 
+### GUI (recommended for non-technical users)
+
+```bash
+python -m arboractive gui
+```
+
+Opens a window with three steps:
+1. Click **Select PDF...** and pick the UConn lab PDF from your computer.
+2. Tick up to two samples from the list (more than two are disabled).
+3. Click **Save as HTML...** or **Save as PDF...** — a native save dialog
+   picks the destination.
+
+Optional title override available. Status bar and dialogs report errors.
+
+### Command line
+
 ```bash
 python -m arboractive report INPUT.pdf \
     --sample "SampleNameA" \
@@ -74,6 +90,7 @@ arboractive/
   __init__.py      package metadata
   __main__.py      entry point for `python -m arboractive`
   cli.py           argparse + orchestration
+  gui.py           Tkinter desktop GUI (optional, `python -m arboractive gui`)
   parse.py         PDF text extraction (pdfplumber + regex)
   thresholds.py    ThresholdSpec table + tier-classifier dispatch
   classify.py      Sample -> ClassifiedSample

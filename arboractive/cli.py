@@ -1,16 +1,17 @@
-"""CLI entry point: parse → classify → analyze → render."""
+"""CLI entry point: parse → classify → render."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+from itertools import takewhile
 from pathlib import Path
 
 from .classify import classify_all
 from .models import Report
 from .parse import find_contact, parse_pdf
-from .render import _format_report_date, render
+from .render import format_report_date, render
 
 MAX_SAMPLES_PER_REPORT = 2
 
@@ -20,7 +21,7 @@ MAX_SAMPLES_PER_REPORT = 2
 _DETERMINISTIC_SOURCE_DATE_EPOCH = "0"
 
 
-def _write_pdf(html: str, out_path: Path) -> None:
+def write_pdf(html: str, out_path: Path) -> None:
     """Render HTML to a deterministic PDF at out_path."""
     os.environ["SOURCE_DATE_EPOCH"] = _DETERMINISTIC_SOURCE_DATE_EPOCH
     # Lazy import so pure-HTML workflows don't pay weasyprint startup cost.
@@ -29,35 +30,26 @@ def _write_pdf(html: str, out_path: Path) -> None:
     HTML(string=html).write_pdf(target=str(out_path))
 
 
-def _derive_title(sample_names: tuple[str, ...]) -> tuple[str, str]:
+def derive_title(sample_names: tuple[str, ...]) -> tuple[str, str]:
     """Return (title, site_name) given the sample names.
 
-    If names share a common prefix of alphabetic chars only (stopping at the
-    first non-alpha), use that prefix as the site name.
-    Otherwise fall back to 'Soil Report' / the first sample's name.
+    Site name is the longest alphabetic prefix shared across all sample names,
+    stopping at the first non-alpha character in any name. Falls back to
+    'Soil Report' / 'Samples' when there's no shared prefix.
     """
     if not sample_names:
         return "Soil Report", "Samples"
-    if len(sample_names) == 1:
-        name = sample_names[0]
-        site = _alpha_prefix(name) or name
-        return f"{site} Soil Report", site
-
-    prefixes = [_alpha_prefix(n) for n in sample_names]
-    common = _common_prefix(prefixes)
+    common = _common_prefix([_alpha_prefix(n) for n in sample_names])
     if common:
         return f"{common} Soil Report", common
+    # Single sample without a non-alpha suffix → _alpha_prefix returns the
+    # full name and _common_prefix returns it too, handled by the branch above.
+    # Here we only reach this for multiple samples with no shared prefix.
     return "Soil Report", "Samples"
 
 
 def _alpha_prefix(s: str) -> str:
-    out = []
-    for ch in s:
-        if ch.isalpha():
-            out.append(ch)
-        else:
-            break
-    return "".join(out)
+    return "".join(takewhile(str.isalpha, s))
 
 
 def _common_prefix(strings: list[str]) -> str:
@@ -94,12 +86,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output path. Extension selects format: .pdf renders a PDF, "
         "any other extension (or stdout, if omitted) writes HTML.",
     )
+    sub.add_parser("gui", help="Launch the graphical interface.")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.command == "gui":
+        from .gui import run_gui  # pylint: disable=import-outside-toplevel
+
+        run_gui()
+        return 0
     if args.command != "report":
         parser.print_help()
         return 1
@@ -144,12 +142,12 @@ def main(argv: list[str] | None = None) -> int:
 
     classified = classify_all(tuple(selected))
 
-    title, site_name = _derive_title(tuple(s.name for s in selected))
+    title, site_name = derive_title(tuple(s.name for s in selected))
     if args.title:
         title = args.title
         site_name = args.title.replace(" Soil Report", "").strip() or site_name
 
-    report_date = _format_report_date(selected[0].reported)
+    report_date = format_report_date(selected[0].reported)
 
     report = Report(
         title=title,
@@ -166,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.out:
         out_path = Path(args.out)
         if out_path.suffix.lower() == ".pdf":
-            _write_pdf(html, out_path)
+            write_pdf(html, out_path)
         else:
             out_path.write_text(html, encoding="utf-8")
     else:

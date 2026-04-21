@@ -1,19 +1,13 @@
-"""Classifier tier assertions using synthetic tier-boundary fixtures.
-
-Each fixture sits cleanly inside one tier for every nutrient so that the
-classifier's output is unambiguous. No real-world customer values.
-"""
+"""Classifier tier assertions using synthetic tier-boundary fixtures."""
 
 from __future__ import annotations
 
 from arboractive.classify import classify
 from arboractive.models import Sample, Tier
 
-VERY_LOW_SAMPLE = Sample(
-    name="very_low",
-    lab_number="0000",
-    received="1/1/2026",
-    reported="1/1/2026",
+from ._fixtures import make_sample
+
+VERY_LOW_SAMPLE = make_sample(
     ph=4.0,
     calcium_lbs_acre=100,
     magnesium_lbs_acre=10,
@@ -23,25 +17,9 @@ VERY_LOW_SAMPLE = Sample(
     cec_meq_100g=2.0,
 )
 
-GOOD_SAMPLE = Sample(
-    name="good",
-    lab_number="0001",
-    received="1/1/2026",
-    reported="1/1/2026",
-    ph=6.5,
-    calcium_lbs_acre=2100,
-    magnesium_lbs_acre=200,
-    potassium_lbs_acre=300,
-    phosphorus_lbs_acre=17,
-    organic_matter_pct=6.5,
-    cec_meq_100g=12.0,
-)
+GOOD_SAMPLE = make_sample()  # defaults already land in GOOD
 
-HIGH_SAMPLE = Sample(
-    name="high",
-    lab_number="0002",
-    received="1/1/2026",
-    reported="1/1/2026",
+HIGH_SAMPLE = make_sample(
     ph=7.1,
     calcium_lbs_acre=3000,
     magnesium_lbs_acre=325,
@@ -70,18 +48,13 @@ def test_high_sample_classifies_all_high() -> None:
 
 def test_tier_boundary_inclusive_at_lower_good() -> None:
     """A value exactly at the lower bound of GOOD should register as GOOD."""
-    # Calcium lower bound of GOOD is 1800
-    s = Sample(
-        name="edge",
-        lab_number="0003",
-        received="1/1/2026",
-        reported="1/1/2026",
-        ph=6.0,  # boundary LOW→GOOD
-        calcium_lbs_acre=1800,  # boundary LOW→GOOD
-        magnesium_lbs_acre=175,  # boundary LOW→GOOD
-        potassium_lbs_acre=250,  # boundary LOW→GOOD
-        phosphorus_lbs_acre=14,  # boundary LOW→GOOD
-        organic_matter_pct=5.0,  # boundary LOW→GOOD
-        cec_meq_100g=10.0,  # boundary LOW→GOOD
+    boundary = make_sample(
+        ph=6.0,
+        calcium_lbs_acre=1800,
+        magnesium_lbs_acre=175,
+        potassium_lbs_acre=250,
+        phosphorus_lbs_acre=14,
+        organic_matter_pct=5.0,
+        cec_meq_100g=10.0,
     )
-    assert set(_tiers(s).values()) == {Tier.GOOD}
+    assert set(_tiers(boundary).values()) == {Tier.GOOD}
