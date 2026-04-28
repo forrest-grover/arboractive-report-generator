@@ -27,6 +27,14 @@ class Sample:
     phosphorus_lbs_acre: float
     organic_matter_pct: float
     cec_meq_100g: float
+    boron_ppm: float
+    copper_ppm: float
+    iron_ppm: float
+    manganese_ppm: float
+    zinc_ppm: float
+    sulfur_ppm: float
+    aluminum_ppm: float
+    lead_ppm: float | None
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,14 @@ _DEFAULT_FIELDS: dict[str, object] = {
     "phosphorus_lbs_acre": 17.0,
     "organic_matter_pct": 6.0,
     "cec_meq_100g": 12.0,
+    "boron_ppm": 1.0,
+    "copper_ppm": 0.5,
+    "iron_ppm": 20.0,
+    "manganese_ppm": 11.0,
+    "zinc_ppm": 35.0,
+    "sulfur_ppm": 55.0,
+    "aluminum_ppm": 155.0,
+    "lead_ppm": None,
 }
 
 

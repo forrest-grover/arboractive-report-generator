@@ -43,6 +43,23 @@ def _parse_page(text: str) -> Sample | None:
         )
     )
 
+    boron = float(_find(r"Boron \(B\)\s+(\d+\.?\d*)", text, "boron", name))
+    copper = float(_find(r"Copper \(Cu\)\s+(\d+\.?\d*)", text, "copper", name))
+    iron = float(_find(r"Iron \(Fe\)\s+(\d+\.?\d*)", text, "iron", name))
+    manganese = float(_find(r"Manganese \(Mn\)\s+(\d+\.?\d*)", text, "manganese", name))
+    zinc = float(_find(r"Zinc \(Zn\)\s+(\d+\.?\d*)", text, "zinc", name))
+    sulfur = float(_find(r"Sulfur \(S\)\s+(\d+\.?\d*)", text, "sulfur", name))
+    aluminum = float(_find(r"Aluminum \(Al\)\s+(\d+\.?\d*)", text, "aluminum", name))
+
+    # Lead is reported either as a numeric ppm or the literal "low" when the lab
+    # detection floor wasn't exceeded. The "low" case maps to None and renders
+    # as a green GOOD tier in classify.py.
+    pb_match = re.search(r"Est\.\s+Total\s+Lead\s+\(Pb\)\s+(\d+\.?\d*|low)", text, re.IGNORECASE)
+    if pb_match is None:
+        raise ValueError(f"Could not find lead in sample {name!r}")
+    pb_raw = pb_match.group(1)
+    lead: float | None = None if pb_raw.lower() == "low" else float(pb_raw)
+
     return Sample(
         name=name,
         lab_number=lab_number,
@@ -55,6 +72,14 @@ def _parse_page(text: str) -> Sample | None:
         phosphorus_lbs_acre=phosphorus,
         organic_matter_pct=organic,
         cec_meq_100g=cec,
+        boron_ppm=boron,
+        copper_ppm=copper,
+        iron_ppm=iron,
+        manganese_ppm=manganese,
+        zinc_ppm=zinc,
+        sulfur_ppm=sulfur,
+        aluminum_ppm=aluminum,
+        lead_ppm=lead,
     )
 
 

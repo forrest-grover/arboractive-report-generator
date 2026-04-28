@@ -9,6 +9,11 @@ Sources:
   so moderately-acidic CT soils register as critically low.
 - CEC: UConn "typical 5-20 meq/100g, 10 adequate".
 - Organic Matter %: calibrated so 4-5% registers as LOW.
+
+Toxic metals (Al, Pb) use a separate ``ToxicSpec`` type because the 5-tier
+"sweet-spot-in-the-middle" bar is semantically wrong for them — *lower is
+always better*. They render via their own one-direction visuals (see
+render.py) and are classified on a three-band GOOD / HIGH / VERY_HIGH scale.
 """
 
 from __future__ import annotations
@@ -27,6 +32,28 @@ class ThresholdSpec:
     breakpoints: tuple[float, float, float, float]
     display_range: tuple[float, float]
     direction: Literal["normal", "inverted"]
+    fmt: Literal["int", "decimal"]
+
+
+@dataclass(frozen=True)
+class ToxicSpec:
+    """One-direction toxic-metal spec: lower is always better.
+
+    - ``cutoff``: value at or above this is VERY_HIGH ("elevated").
+    - ``caution_fraction``: values in ``[cutoff*caution_fraction, cutoff)``
+      classify as HIGH (caution); below that is GOOD.
+
+    Both Al and Pb render as pill-style status chips (green OK / red
+    ELEVATED). An earlier gradient-bar style was removed when users
+    reported the bar + cutoff tick was harder to read at a glance than
+    a plain pill.
+    """
+
+    label: str
+    attr: str
+    unit: str
+    cutoff: float
+    caution_fraction: float
     fmt: Literal["int", "decimal"]
 
 
@@ -66,7 +93,40 @@ SPECS: tuple[ThresholdSpec, ...] = (
         "Organic Matter", "organic_matter_pct", "%", (2, 5, 8, 10), (0, 15), "normal", "decimal"
     ),
     ThresholdSpec("CEC", "cec_meq_100g", "meq/100g", (5, 10, 15, 20), (0, 30), "normal", "decimal"),
+    ThresholdSpec(
+        "Boron", "boron_ppm", "ppm", (0.05, 0.1, 2.0, 3.0), (0, 4.0), "normal", "decimal"
+    ),
+    ThresholdSpec(
+        "Copper", "copper_ppm", "ppm", (0.15, 0.3, 0.8, 1.2), (0, 1.6), "normal", "decimal"
+    ),
+    ThresholdSpec(
+        "Iron", "iron_ppm", "ppm", (0.5, 1.0, 40.0, 60.0), (0, 80.0), "normal", "decimal"
+    ),
+    ThresholdSpec(
+        "Manganese",
+        "manganese_ppm",
+        "ppm",
+        (1.5, 3.0, 20.0, 30.0),
+        (0, 40.0),
+        "normal",
+        "decimal",
+    ),
+    ThresholdSpec(
+        "Zinc", "zinc_ppm", "ppm", (0.05, 0.1, 70.0, 105.0), (0, 140.0), "normal", "decimal"
+    ),
+    ThresholdSpec("Sulfur", "sulfur_ppm", "ppm", (5, 10, 100, 150), (0, 200), "normal", "int"),
 )
+
+
+TOXICS: tuple[ToxicSpec, ...] = (
+    ToxicSpec("Aluminum", "aluminum_ppm", "ppm", 300.0, 0.8, "int"),
+    ToxicSpec("Lead (Pb)", "lead_ppm", "ppm", 100.0, 0.8, "int"),
+)
+
+# Tuple-of-pairs lookup instead of a dict so the determinism contract
+# (no dicts/sets across boundaries) holds. Two entries — a linear scan is fine.
+TOXIC_BY_LABEL: tuple[tuple[str, ToxicSpec], ...] = tuple((t.label, t) for t in TOXICS)
+
 
 SPEC_BY_LABEL: dict[str, ThresholdSpec] = {s.label: s for s in SPECS}
 
@@ -112,6 +172,32 @@ def tier_for(spec: ThresholdSpec, v: float) -> Tier:
     return Tier.VERY_HIGH
 
 
+def toxic_tier_for(spec: ToxicSpec, v: float) -> Tier:
+    """Three-band classification for toxic metals.
+
+    - ``v < cutoff * caution_fraction`` → GOOD
+    - ``cutoff * caution_fraction <= v < cutoff`` → HIGH (caution)
+    - ``v >= cutoff`` → VERY_HIGH (elevated)
+
+    VERY_LOW / LOW are structurally unreachable — "lower" is always "better"
+    on a toxic-metal axis, so there's no below-optimal band.
+    """
+    caution = spec.cutoff * spec.caution_fraction
+    if v < caution:
+        return Tier.GOOD
+    if v < spec.cutoff:
+        return Tier.HIGH
+    return Tier.VERY_HIGH
+
+
+def toxic_lookup(label: str) -> ToxicSpec | None:
+    """Return the ToxicSpec for ``label`` or None. Linear scan by design."""
+    for name, spec in TOXIC_BY_LABEL:
+        if name == label:
+            return spec
+    return None
+
+
 def _zone_boundaries_asc(spec: ThresholdSpec) -> tuple[float, float, float, float]:
     if spec.direction == "normal":
         return spec.breakpoints
@@ -137,4 +223,8 @@ def tier_to_zone_index(spec: ThresholdSpec, tier: Tier) -> int:
 
 
 def format_value(spec: ThresholdSpec, v: float) -> str:
+    return f"{round(v)}" if spec.fmt == "int" else f"{v:.1f}"
+
+
+def format_toxic_value(spec: ToxicSpec, v: float) -> str:
     return f"{round(v)}" if spec.fmt == "int" else f"{v:.1f}"
