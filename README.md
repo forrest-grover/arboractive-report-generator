@@ -12,6 +12,28 @@ samples side-by-side.
 
 ## Install
 
+### macOS / Linux
+
+```bash
+./install.sh
+```
+
+Creates `.venv/`, installs the package editable, and writes an
+`arboractive-gui` launcher in the repo root.
+
+### Windows
+
+Double-click `install.bat` (or run `install.ps1` from PowerShell). Creates
+`.venv\`, installs the package, and writes `arboractive-gui.bat` in the
+repo root — double-click that to launch the GUI.
+
+PDF export uses WeasyPrint, which needs the GTK runtime on Windows. If
+`Save as PDF...` fails with a "cannot load library" error, install
+[GTK for Windows](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases)
+and reopen the launcher. HTML export works without GTK.
+
+### Manual
+
 ```bash
 pip install -e .
 ```
